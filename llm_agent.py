@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AI
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
-from tools import all_tools
+from tools.tools import all_tools
 from skills import SkillsManager
 
 # Load environment variables from .env file
