@@ -55,7 +55,7 @@ OPENAI_MODEL=your-model-name
 Start the FastAPI server with approval support:
 
 ```bash
-python llm_api_server.py
+uv run python llm_api_server.py
 ```
 
 The server will start on `http://localhost:8000`
@@ -73,7 +73,7 @@ The server will start on `http://localhost:8000`
 In a separate terminal, start the interactive CLI client:
 
 ```bash
-python llm_assistant_cli.py
+uv run python llm_assistant_cli.py
 ```
 
 **CLI Commands:**
@@ -165,8 +165,8 @@ The agent has access to these tools:
 ### Adding New Tools
 
 1. Add a new function in `tools.py` with the `@tool` decorator
-2. Tools are automatically discovered - no need to manually export
-3. Add to `APPROVAL_REQUIRED_TOOLS` if it needs user approval
+2. Add the tool name in `all_tools` list variable in `tools/tools.py`
+3. Add to `APPROVAL_REQUIRED_TOOLS` if it needs user approval. Otherwise it will run without asking for approval
 
 ```python
 @tool
