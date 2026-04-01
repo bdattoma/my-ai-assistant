@@ -11,6 +11,10 @@ A conversational AI code assistant built with LangGraph that features file opera
 - 💬 **Session Management** - Maintain conversation context across interactions
 - ⚡ **Token Streaming** - Real-time response streaming for better UX
 
+## Disclaimer
+
+> **Note:** Most of the code in this project was developed with assistance from [Claude Code](https://claude.ai/claude-code), Anthropic's AI-powered coding assistant. This project serves as a demonstration of AI-assisted development and LangGraph capabilities.
+
 ## Prerequisites
 
 - Python 3.12+
