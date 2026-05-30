@@ -9,10 +9,8 @@ import sys
 import json
 from typing import Optional, List, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
-from langchain_core.callbacks import BaseCallbackHandler
 from llm_agent import build_graph
 from tools.tools import all_tools, APPROVAL_REQUIRED_TOOLS
-from skills import SkillsManager
 from dotenv import load_dotenv
 from openai import AuthenticationError, APIConnectionError, OpenAIError
 
@@ -26,43 +24,53 @@ def print_connection_error(error_details):
     print(f"  {BOLD}Reason:{RESET}  {error_details}")
     print(f"  {BOLD}Action:{RESET}  Check your API_KEY, BASE_URL, and network connection.\n")
 
-class ApprovalCallbackHandler(BaseCallbackHandler):
-    """Callback handler to manage tool approvals"""
-    
-    def __init__(self):
-        self.pending_approval = None
-        self.approval_granted = None
-        self.approval_tool_name = None
-        self.approval_tool_args = None
-        
-    def on_tool_start(self, serialized, input_str, **kwargs):
-        """Called when a tool is about to be executed"""
-        tool_name = serialized.get("name", "")
-        if tool_name in APPROVAL_REQUIRED_TOOLS:
-            # Parse the input to get tool arguments
-            try:
-                # Try to parse as JSON or dict
-                if isinstance(input_str, str):
-                    # Try to evaluate as Python literal
-                    import ast
-                    args = ast.literal_eval(input_str)
+def create_approval_tool_node():
+    def tool_node_fn(state):
+        last_message = state["messages"][-1]
+        if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
+            return {"messages": []}
+
+        results = []
+        for tool_call in last_message.tool_calls:
+            tool_name = tool_call.get("name", "")
+            tool_args = tool_call.get("args", {})
+            tool_id = tool_call.get("id", "")
+
+            tool = next((t for t in all_tools if t.name == tool_name), None)
+            if tool is None:
+                results.append(ToolMessage(
+                    content=f"Error: Unknown tool '{tool_name}'",
+                    tool_call_id=tool_id
+                ))
+                continue
+
+            print(f"\n🔧 Using tool: {tool_name}")
+            for k, v in tool_args.items():
+                if k == 'content' and isinstance(v, str):
+                    print(f"   {k}: ({len(v)} chars, {v.count(chr(10)) + 1} lines)")
                 else:
-                    args = input_str
-            except:
-                # If parsing fails, treat as raw string
-                args = {"input": input_str}
-                
-            self.pending_approval = True
-            self.approval_tool_name = tool_name
-            self.approval_tool_args = args
-            # Return None to signal we need approval - but we'll handle this differently
-            
-    def on_tool_end(self, output, **kwargs):
-        """Called when a tool finishes execution"""
-        self.pending_approval = None
-        self.approval_tool_name = None
-        self.approval_tool_args = None
-        self.approval_granted = None
+                    print(f"   {k}: {v}")
+
+            if tool_name in APPROVAL_REQUIRED_TOOLS:
+                if not get_approval_for_tool(tool_name, tool_args):
+                    results.append(ToolMessage(
+                        content=f"❌ Tool '{tool_name}' execution was denied by user.",
+                        tool_call_id=tool_id
+                    ))
+                    continue
+
+            try:
+                result_content = tool.invoke(tool_args)
+                first_line = result_content.split('\n')[0][:200]
+                print(f"✓ {tool_name}: {first_line}")
+            except Exception as e:
+                result_content = f"Error executing {tool_name}: {e}"
+                print(f"✗ {tool_name}: {result_content}")
+
+            results.append(ToolMessage(content=result_content, tool_call_id=tool_id))
+
+        return {"messages": results}
+    return tool_node_fn
 
 
 def get_approval_for_tool(tool_name: str, args: dict) -> bool:
@@ -128,9 +136,9 @@ def print_banner():
 
 def main():
     try:
-        # Build the agent graph
+        # Build the agent graph with approval-aware tool node
         print("Initializing AI assistant...")
-        app = build_graph()
+        app = build_graph(tool_node=create_approval_tool_node())
         
         # Initialize conversation state
         conversation_state = {
@@ -192,21 +200,34 @@ def main():
                 
                 # Process with the agent
                 print("🤖 AI: ", end="", flush=True)
-                
-                # Invoke the graph with a limit to prevent infinite loops
+
                 try:
                     result = app.invoke(conversation_state, {"recursion_limit": 10})
                 except OpenAIError as e:
                     print_connection_error(f"Generic OpenAI Error: {e}")
-                    result = [AIMessage(content="")]
+                    result = {"messages": [AIMessage(content="")]}
                 except Exception as e:
                     print_connection_error(f"❌ An unexpected error occurred: {e}")
-                    result = [AIMessage(content="")]
-                
-                # Update conversation state with the result
+                    result = {"messages": [AIMessage(content="")]}
+
+                # Update conversation state
                 conversation_state = result
-                
-                # Print a newline after the response
+
+                # Print AI response content (last AIMessage with text)
+                if isinstance(result, dict) and "messages" in result:
+                    printed_ai = False
+                    for msg in reversed(result["messages"]):
+                        if isinstance(msg, AIMessage) and msg.content:
+                            print(msg.content, end="")
+                            printed_ai = True
+                            break
+                    if not printed_ai:
+                        # Fallback: print any AI message content
+                        for msg in result["messages"]:
+                            if isinstance(msg, AIMessage) and msg.content:
+                                print(msg.content, end="")
+                                break
+
                 print()  # New line after response
                 
             except EOFError:
