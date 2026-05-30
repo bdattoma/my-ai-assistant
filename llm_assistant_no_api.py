@@ -24,53 +24,41 @@ def print_connection_error(error_details):
     print(f"  {BOLD}Reason:{RESET}  {error_details}")
     print(f"  {BOLD}Action:{RESET}  Check your API_KEY, BASE_URL, and network connection.\n")
 
-def create_approval_tool_node():
-    def tool_node_fn(state):
-        last_message = state["messages"][-1]
-        if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-            return {"messages": []}
+class _ApprovalToolWrapper:
+    def __init__(self, tool):
+        self._tool = tool
+        self.name = tool.name
 
-        results = []
-        for tool_call in last_message.tool_calls:
-            tool_name = tool_call.get("name", "")
-            tool_args = tool_call.get("args", {})
-            tool_id = tool_call.get("id", "")
+    def invoke(self, tool_input, *args, **kwargs):
+        tool_name = self.name
+        tool_args = tool_input if isinstance(tool_input, dict) else {"input": str(tool_input)}
 
-            tool = next((t for t in all_tools if t.name == tool_name), None)
-            if tool is None:
-                results.append(ToolMessage(
-                    content=f"Error: Unknown tool '{tool_name}'",
-                    tool_call_id=tool_id
-                ))
-                continue
+        print(f"\n🔧 Using tool: {tool_name}")
+        for k, v in tool_args.items():
+            if k == 'content' and isinstance(v, str):
+                print(f"   {k}: ({len(v)} chars, {v.count(chr(10)) + 1} lines)")
+            else:
+                print(f"   {k}: {v}")
 
-            print(f"\n🔧 Using tool: {tool_name}")
-            for k, v in tool_args.items():
-                if k == 'content' and isinstance(v, str):
-                    print(f"   {k}: ({len(v)} chars, {v.count(chr(10)) + 1} lines)")
-                else:
-                    print(f"   {k}: {v}")
+        if tool_name in APPROVAL_REQUIRED_TOOLS:
+            if not get_approval_for_tool(tool_name, tool_args):
+                return f"❌ Tool '{tool_name}' execution was denied by user."
 
-            if tool_name in APPROVAL_REQUIRED_TOOLS:
-                if not get_approval_for_tool(tool_name, tool_args):
-                    results.append(ToolMessage(
-                        content=f"❌ Tool '{tool_name}' execution was denied by user.",
-                        tool_call_id=tool_id
-                    ))
-                    continue
+        result = self._tool.invoke(tool_input, *args, **kwargs)
+        first_line = result.split('\n')[0][:200]
+        print(f"✓ {tool_name}: {first_line}")
+        return result
 
-            try:
-                result_content = tool.invoke(tool_args)
-                first_line = result_content.split('\n')[0][:200]
-                print(f"✓ {tool_name}: {first_line}")
-            except Exception as e:
-                result_content = f"Error executing {tool_name}: {e}"
-                print(f"✗ {tool_name}: {result_content}")
+    def __getattr__(self, name):
+        return getattr(self._tool, name)
 
-            results.append(ToolMessage(content=result_content, tool_call_id=tool_id))
 
-        return {"messages": results}
-    return tool_node_fn
+def _build_approval_tools():
+    """Wrap tools that need approval while keeping the rest as-is."""
+    return [
+        _ApprovalToolWrapper(t) if t.name in APPROVAL_REQUIRED_TOOLS else t
+        for t in all_tools
+    ]
 
 
 def get_approval_for_tool(tool_name: str, args: dict) -> bool:
@@ -136,9 +124,9 @@ def print_banner():
 
 def main():
     try:
-        # Build the agent graph with approval-aware tool node
+        # Build the agent graph with approval-wrapped tools
         print("Initializing AI assistant...")
-        app = build_graph(tool_node=create_approval_tool_node())
+        app = build_graph(tools=_build_approval_tools())
         
         # Initialize conversation state
         conversation_state = {

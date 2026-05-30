@@ -94,14 +94,14 @@ Be concise and helpful in your responses."""
     return {"messages": [response]}
 
 
-def build_graph(tool_node=None):
+def build_graph(tools=None):
     """Build and compile the LangGraph workflow with tools and skills"""
     # Create a new graph
     workflow = StateGraph(AgentState)
 
     # Add nodes
     workflow.add_node("agent", call_model)
-    workflow.add_node("tools", tool_node or ToolNode(all_tools))
+    workflow.add_node("tools", ToolNode(tools or all_tools))
 
     # Set entry point
     workflow.set_entry_point("agent")
