@@ -54,7 +54,27 @@ OPENAI_MODEL=your-model-name
 
 ## Usage
 
-### Running the Server
+### Main Option: No-API Interactive Mode
+
+Run the assistant directly without needing a separate API server:
+
+```bash
+uv run python llm_assistant_no_api.py
+```
+
+This starts an interactive CLI that directly uses the LangGraph agent with approval system.
+
+**CLI Commands:**
+- `/exit` or `/quit` - Exit the chat
+- `/reset` - Start a new conversation
+- `/history` - Show conversation history
+- `/help` - Show help message
+
+### Alternative: Server-Based Mode
+
+If you prefer the client-server architecture:
+
+#### Running the Server
 
 Start the FastAPI server with approval support:
 
@@ -72,7 +92,7 @@ The server will start on `http://localhost:8000`
 - `DELETE /session/{id}` - Delete session
 - `GET /sessions` - List all sessions
 
-### Running the CLI
+#### Running the CLI
 
 In a separate terminal, start the interactive CLI client:
 
@@ -143,7 +163,8 @@ The agent will automatically discover and load relevant skills based on the conv
 hello-agent/
 ├── llm_agent.py                           # Main agent logic
 ├── llm_api_server.py                      # FastAPI server with approval
-├── code_assistant_cli_with_approval.py    # CLI client
+├── llm_assistant_no_api.py                # Interactive CLI without API server (MAIN OPTION)
+├── code_assistant_cli_with_approval.py    # CLI client (server mode)
 ├── tools.py                               # Tool definitions
 ├── skills.py                              # Skills management system
 ├── requirements.txt                       # Python dependencies
