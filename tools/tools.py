@@ -141,8 +141,66 @@ def load_skill(skill_name: str) -> str:
         return f"Error loading skill: {str(e)}"
 
 
+@tool
+def patch_file(file_path: str, search_string: str, replace_string: str, replace_all: bool = False) -> str:
+    """
+    Apply a search-and-replace patch to a file. Finds exact matches of search_string
+    and replaces them with replace_string. Useful for making targeted edits without
+    rewriting entire files. REQUIRES USER APPROVAL before execution.
+
+    Args:
+        file_path: The path to the file to patch (relative or absolute)
+        search_string: The exact text to search for in the file
+        replace_string: The text to replace the search_string with
+        replace_all: If True, replace all occurrences. If False (default), replace only the first.
+
+    Returns:
+        A message indicating success or failure, with details about the change
+    """
+    try:
+        path = Path(file_path)
+
+        if not path.exists():
+            return f"Error: File {file_path} does not exist"
+
+        if not path.is_file():
+            return f"Error: {file_path} is not a file"
+
+        content = path.read_text()
+
+        if search_string not in content:
+            return (
+                f"Error: Could not find the specified text in {file_path}. "
+                f"The search string was not found in the file content."
+            )
+
+        count = content.count(search_string)
+
+        if count > 1 and not replace_all:
+            return (
+                f"Error: Found {count} occurrences of the search string in {file_path}. "
+                f"Set replace_all=True to replace all, or provide more context in the search string "
+                f"to uniquely identify the target location."
+            )
+
+        if replace_all:
+            new_content = content.replace(search_string, replace_string)
+        else:
+            new_content = content.replace(search_string, replace_string, 1)
+
+        path.write_text(new_content)
+
+        return (
+            f"Successfully patched {file_path}: "
+            f"replaced {count if replace_all else 1} occurrence(s) "
+            f"({len(search_string)} chars -> {len(replace_string)} chars)"
+        )
+    except Exception as e:
+        return f"Error patching file: {str(e)}"
+
+
 # Tools that require approval
-APPROVAL_REQUIRED_TOOLS = ["write_file"]
+APPROVAL_REQUIRED_TOOLS = ["write_file", "patch_file"]
 
 # Export all tools
-all_tools = [write_file, read_file, list_files, list_skills, load_skill]
+all_tools = [write_file, read_file, list_files, list_skills, load_skill, patch_file]
